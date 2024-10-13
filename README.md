@@ -15,11 +15,11 @@ This project sets up an ETL (Extract, Transform, Load) pipeline for Strava data 
 3. Create a Cloud Storage bucket named "raw-events"
 4. Deploy the webhook receiver Cloud Function
 
-For detailed setup instructions, see [webhook_setup.md](docs/webhook_setup.md).
+For detailed setup instructions, see [webhook_guide.md](docs/webhook_guide.md).
 
 ## Local Testing
 
-For information on local testing with ngrok, see [local_testing.md](docs/local_testing.md).
+For information on local testing with ngrok, see [local_testing.md](docs/local_ngrok_testing.md).
 
 ## Cloud Function Deployment
 
