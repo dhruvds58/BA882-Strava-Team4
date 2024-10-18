@@ -1,1 +1,92 @@
 
+from google.cloud import bigquery
+from google.cloud import storage
+
+def load_csv_to_bigquery():
+    # Initialize the BigQuery client and Storage client
+    bigquery_client = bigquery.Client(project='strava-etl')
+    storage_client = storage.Client()
+
+    # Define the source of the CSV file in your Cloud Storage bucket
+    bucket_name = 'strava-users'
+    file_name = '/transformed_laps.csv'
+    dataset_id = 'strava_data'  # BigQuery dataset
+    table_id = 'transformed_laps'  # Destination table in BigQuery
+
+    # Set the URI for the data in Cloud Storage
+    uri = f"gs://{bucket_name}/{file_name}"
+
+    # Define the table destination
+    table_ref = bigquery_client.dataset(dataset_id).table(table_id)
+
+    # Define job configuration for loading the CSV
+    job_config = bigquery.LoadJobConfig(
+        source_format=bigquery.SourceFormat.CSV,
+        skip_leading_rows=1,  
+        autodetect=True,  
+        allow_jagged_rows=True,  
+        quote_character='"'  
+    )
+
+    # Load the data from Cloud Storage into BigQuery
+    load_job = bigquery_client.load_table_from_uri(
+        uri, 
+        table_ref, 
+        job_config=job_config
+    )  # Make an API request.
+
+    print(f"Starting job {load_job.job_id}")
+
+    load_job.result()  
+
+    print(f"Loaded {load_job.output_rows} rows into {dataset_id}:{table_id}.")
+
+# Call the function
+load_csv_to_bigquery()
+
+########################
+
+from google.cloud import bigquery
+from google.cloud import storage
+
+def load_csv_to_bigquery():
+    # Initialize the BigQuery client and Storage client
+    bigquery_client = bigquery.Client(project='strava-etl')
+    storage_client = storage.Client()
+
+    # Define the source of the CSV file in your Cloud Storage bucket
+    bucket_name = 'strava-users'
+    file_name = '/transformed_detailedactivity.csv'
+    dataset_id = 'strava_data'  # BigQuery dataset
+    table_id = 'transformed_detailedactivity'  # Destination table in BigQuery
+
+    # Set the URI for the data in Cloud Storage
+    uri = f"gs://{bucket_name}/{file_name}"
+
+    # Define the table destination
+    table_ref = bigquery_client.dataset(dataset_id).table(table_id)
+
+    # Define job configuration for loading the CSV
+    job_config = bigquery.LoadJobConfig(
+        source_format=bigquery.SourceFormat.CSV,
+        skip_leading_rows=1,  
+        autodetect=True,  
+        allow_jagged_rows=True,  
+        quote_character='"'  
+    )
+
+    # Load the data from Cloud Storage into BigQuery
+    load_job = bigquery_client.load_table_from_uri(
+        uri, 
+        table_ref, 
+        job_config=job_config
+    )  # Make an API request.
+
+    print(f"Starting job {load_job.job_id}")
+
+    load_job.result()  
+
+    print(f"Loaded {load_job.output_rows} rows into {dataset_id}:{table_id}.")
+
+# Call the function
+load_csv_to_bigquery()
