@@ -136,4 +136,9 @@ def etl_flow(athlete_id: str, activity_id: str):
         raise
 
 if __name__ == "__main__":
-    etl_flow("57248538", "12709400031")
+    try:
+        logger.info("Starting ETL flow")
+        etl_flow("57248538", "12709400031")
+    except Exception as e:
+        logger.error(f"Error in ETL flow: {str(e)}")
+        raise
