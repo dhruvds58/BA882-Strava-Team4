@@ -1,149 +1,144 @@
 from prefect import flow, task
-from prefect.logging import get_run_logger
+from prefect_gcp import GcpCredentials
 from google.cloud import storage
 from google.cloud import bigquery
 import json
 import pandas as pd
 from typing import Dict, Any, List
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 @task
-def extract_data(athlete_id: str, activity_id: str) -> Dict[str, Any]:
-    logger = get_run_logger()
+def get_gcp_creds():
+    return GcpCredentials.load("gcp-creds")
+
+@task
+def extract_data(gcp_credentials: GcpCredentials, athlete_id: str, activity_id: str) -> Dict[str, Any]:
     logger.info(f"Extracting data for athlete {athlete_id} and activity {activity_id}")
-    try:
-        storage_client = storage.Client()
-        bucket = storage_client.bucket('strava-users')
-        activity_blob = bucket.blob(f'activities/athlete_{athlete_id}_activity_{activity_id}_activities.json')
-        laps_blob = bucket.blob(f'laps/athlete_{athlete_id}_activity_{activity_id}_laps.json')
-        
-        activity_data = json.loads(activity_blob.download_as_string())
-        laps_data = json.loads(laps_blob.download_as_string())
-        
-        logger.info(f"Extracted activity data with {len(activity_data)} fields")
-        logger.info(f"Extracted laps data with {len(laps_data)} laps")
-        
-        return {
-            'activity': activity_data,
-            'laps': laps_data
-        }
-    except Exception as e:
-        logger.error(f"Error in extract_data: {str(e)}")
-        raise
+    storage_client = storage.Client(credentials=gcp_credentials.get_credentials_from_service_account())
+    bucket = storage_client.bucket('strava-users')
+    activity_blob = bucket.blob(f'activities/athlete_{athlete_id}_activity_{activity_id}_activities.json')
+    laps_blob = bucket.blob(f'laps/athlete_{athlete_id}_activity_{activity_id}_laps.json')
+    
+    activity_data = json.loads(activity_blob.download_as_string())
+    laps_data = json.loads(laps_blob.download_as_string())
+    
+    logger.info(f"Extracted activity data with {len(activity_data)} fields")
+    logger.info(f"Extracted laps data with {len(laps_data)} laps")
+    
+    return {
+        'activity': activity_data,
+        'laps': laps_data
+    }
 
 @task
 def transform_activity_data(activity_data: Dict[str, Any]) -> pd.DataFrame:
-    logger = get_run_logger()
     logger.info("Transforming activity data")
-    try:
-        columns_to_keep = [
-            'resource_state', 'name', 'distance', 'moving_time', 'elapsed_time',
-            'total_elevation_gain', 'type', 'sport_type', 'workout_type', 'id',
-            'start_date', 'start_date_local', 'timezone', 'achievement_count',
-            'kudos_count', 'comment_count', 'athlete_count', 'photo_count',
-            'trainer', 'commute', 'manual', 'private', 'visibility', 'flagged',
-            'gear_id', 'start_latlng', 'end_latlng', 'average_speed', 'max_speed',
-            'average_cadence', 'average_watts', 'max_watts', 'weighted_average_watts',
-            'kilojoules', 'device_watts', 'has_heartrate', 'average_heartrate',
-            'max_heartrate', 'elev_high', 'elev_low', 'upload_id', 'upload_id_str',
-            'external_id', 'pr_count', 'total_photo_count', 'suffer_score',
-            'calories', 'perceived_exertion', 'prefer_perceived_exertion',
-            'device_name', 'embed_token', 'athlete.id', 'gear.primary',
-            'gear.name', 'gear.distance'
-        ]
+    
+    # Updated columns to match the structure from normalization
+    columns_to_keep = [
+        'resource_state', 'name', 'distance', 'moving_time', 'elapsed_time',
+        'total_elevation_gain', 'type', 'sport_type', 'workout_type', 'id',
+        'start_date', 'start_date_local', 'timezone', 'achievement_count',
+        'kudos_count', 'comment_count', 'athlete_count', 'photo_count',
+        'trainer', 'commute', 'manual', 'private', 'visibility', 'flagged',
+        'gear_id', 'gear_primary', 'gear_name', 'gear_distance',
+        'start_latlng', 'end_latlng', 'average_speed', 'max_speed',
+        'average_cadence', 'average_watts', 'max_watts', 'weighted_average_watts',
+        'kilojoules', 'device_watts', 'has_heartrate', 'average_heartrate',
+        'max_heartrate', 'elev_high', 'elev_low', 'upload_id', 'upload_id_str',
+        'external_id', 'pr_count', 'total_photo_count', 'suffer_score',
+        'calories', 'perceived_exertion', 'prefer_perceived_exertion',
+        'device_name', 'embed_token', 'athlete_id'
+    ]
+    
+    # Normalize JSON data and keep selected columns
+    df = pd.json_normalize(activity_data, sep='_')[columns_to_keep]
 
-        df = pd.json_normalize(activity_data, sep='_')[columns_to_keep]
+    # Rename columns if needed (keeping it simple in this case)
+    df = df.rename(columns={
+        'athlete_id': 'athlete_id',
+        'gear_primary': 'gear_primary',
+        'gear_name': 'gear_name',
+        'gear_distance': 'gear_distance'
+    })
+    
+    # Convert date columns to datetime
+    date_columns = ['start_date', 'start_date_local']
+    for col in date_columns:
+        df[col] = pd.to_datetime(df[col])
 
-        df = df.rename(columns={
-            'athlete_id': 'athlete_id',
-            'gear_primary': 'gear_primary',
-            'gear_name': 'gear_name',
-            'gear_distance': 'gear_distance'
-        })
+    # Calculate elevation change
+    df['elevation_change'] = df['elev_high'] - df['elev_low']
 
-        date_columns = ['start_date', 'start_date_local']
-        for col in date_columns:
-            df[col] = pd.to_datetime(df[col])
+    # Add additional time-based features
+    df['day_of_week'] = df['start_date_local'].dt.day_name()
+    df['hour'] = df['start_date_local'].dt.hour
+    df['month'] = df['start_date_local'].dt.month_name()
 
-        df['elevation_change'] = df['elev_high'] - df['elev_low']
-        df['day_of_week'] = df['start_date_local'].dt.day_name()
-        df['hour'] = df['start_date_local'].dt.hour
-        df['month'] = df['start_date_local'].dt.month_name()
-
-        logger.info(f"Transformed activity data into DataFrame with shape {df.shape}")
-        return df
-    except Exception as e:
-        logger.error(f"Error in transform_activity_data: {str(e)}")
-        raise
+    logger.info(f"Transformed activity data into DataFrame with shape {df.shape}")
+    return df
 
 @task
 def transform_laps_data(laps_data: List[Dict[str, Any]]) -> pd.DataFrame:
-    logger = get_run_logger()
-    logger.info(f"Transforming laps data with {len(laps_data)} laps")
-    try:
-        columns_to_keep = [
-            'id', 'resource_state', 'name', 'elapsed_time', 'moving_time',
-            'start_date', 'start_date_local', 'distance', 'average_speed',
-            'max_speed', 'lap_index', 'split', 'start_index', 'end_index',
-            'total_elevation_gain', 'average_cadence', 'device_watts',
-            'average_watts', 'average_heartrate', 'max_heartrate', 'pace_zone',
-            'activity.id', 'activity.visibility', 'activity.resource_state',
-            'athlete.id', 'athlete.resource_state'
-        ]
+    logger.info("Transforming laps data")
+    
+    # Placeholder: Adjust based on the actual structure of normalized data
+    columns_to_keep = [
+        'id', 'resource_state', 'name', 'elapsed_time', 'moving_time',
+        'start_date', 'start_date_local', 'distance', 'average_speed',
+        'max_speed', 'lap_index', 'total_elevation_gain', 'average_cadence',
+        'device_watts', 'average_watts', 'average_heartrate', 'max_heartrate',
+        'pace_zone'
+    ]
+    
+    # Normalize the JSON data and filter columns
+    df = pd.json_normalize(laps_data, sep='_')[columns_to_keep]
+    
+    # Convert date columns to datetime
+    date_columns = ['start_date', 'start_date_local']
+    for col in date_columns:
+        df[col] = pd.to_datetime(df[col])
 
-        df = pd.json_normalize(laps_data, sep='_')[columns_to_keep]
-
-        df = df.rename(columns={
-            'activity_id': 'activity_id',
-            'activity_visibility': 'activity_visibility',
-            'activity_resource_state': 'activity_resource_state',
-            'athlete_id': 'athlete_id',
-            'athlete_resource_state': 'athlete_resource_state'
-        })
-
-        date_columns = ['start_date', 'start_date_local']
-        for col in date_columns:
-            df[col] = pd.to_datetime(df[col])
-
-        df['start_day'] = df['start_date_local'].dt.day
-        df['start_hour'] = df['start_date_local'].dt.hour
-        df['start_weekday'] = df['start_date_local'].dt.weekday
-
-        logger.info(f"Transformed laps data into DataFrame with shape {df.shape}")
-        return df
-    except Exception as e:
-        logger.error(f"Error in transform_laps_data: {str(e)}")
-        raise
+    logger.info(f"Transformed laps data into DataFrame with shape {df.shape}")
+    return df
 
 @task
-def load_to_bigquery(df: pd.DataFrame, table_id: str) -> None:
-    logger = get_run_logger()
+def load_to_bigquery(gcp_credentials: GcpCredentials, df: pd.DataFrame, table_id: str) -> None:
     logger.info(f"Loading {len(df)} rows into BigQuery table {table_id}")
-    try:
-        client = bigquery.Client()
-        job_config = bigquery.LoadJobConfig(autodetect=True)
-        
-        job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
-        job.result()
+    client = bigquery.Client(credentials=gcp_credentials.get_credentials_from_service_account())
+    job_config = bigquery.LoadJobConfig(autodetect=True)
+    
+    job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
+    job.result()
 
-        logger.info(f"Successfully loaded {len(df)} rows into {table_id}")
-    except Exception as e:
-        logger.error(f"Error in load_to_bigquery: {str(e)}")
-        raise
+    logger.info(f"Successfully loaded {len(df)} rows into {table_id}")
 
 @flow
 def etl_flow(athlete_id: str, activity_id: str):
-    logger = get_run_logger()
     logger.info(f"Starting ETL flow for athlete {athlete_id} and activity {activity_id}")
     try:
-        data = extract_data(athlete_id, activity_id)
+        # Get GCP credentials
+        gcp_creds = get_gcp_creds()
+        
+        # Extract
+        data = extract_data(gcp_creds, athlete_id, activity_id)
+        
+        # Transform
         transformed_activity = transform_activity_data(data['activity'])
         transformed_laps = transform_laps_data(data['laps'])
-        load_to_bigquery(transformed_activity, "strava-etl.strava_data.activities")
-        load_to_bigquery(transformed_laps, "strava-etl.strava_data.laps")
+        
+        # Load
+        load_to_bigquery(gcp_creds, transformed_activity, "strava-etl.strava_data.activities")
+        load_to_bigquery(gcp_creds, transformed_laps, "strava-etl.strava_data.laps")
+        
         logger.info("ETL flow completed successfully")
     except Exception as e:
         logger.error(f"An error occurred during the ETL flow: {str(e)}")
         raise
 
 if __name__ == "__main__":
-    etl_flow("test_athlete_id", "test_activity_id")
+    etl_flow("57248538", "12709400031")
