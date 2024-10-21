@@ -2,7 +2,7 @@ from prefect import flow
 
 if __name__ == "__main__":
     flow.from_source(
-        source="https://github.com/jbbjr/BA882-Strava-Team4.git",
+        source="https://github.com/dhruvds58/BA882-Strava-Team4.git",
         entrypoint="prefect/flows/etl_flow.py:etl_flow",
     ).deploy(
         name="strava-etl-flow",
