@@ -115,12 +115,10 @@ def fetch_activity_data(cloud_event):
     laps_success = fetch_and_store_data(laps_url, athlete_id, activity_id, 'laps')
 
     if activity_success or laps_success:
-        # Trigger ETL process
+        # Trigger ETL process via Pub/Sub
         etl_message = json.dumps({
             'athlete_id': athlete_id,
             'activity_id': activity_id,
-            'activity_success': activity_success,
-            'laps_success': laps_success
         }).encode('utf-8')
         
         try:
@@ -128,12 +126,3 @@ def fetch_activity_data(cloud_event):
             print(f"ETL trigger sent for athlete {athlete_id}, activity {activity_id}")
         except Exception as e:
             print(f"Failed to send ETL trigger: {str(e)}")
-
-        if activity_success and laps_success:
-            return 'Activity and laps data fetched and stored, ETL triggered', 200
-        elif activity_success:
-            return 'Only activity data fetched and stored, ETL triggered', 200
-        elif laps_success:
-            return 'Only laps data fetched and stored, ETL triggered', 200
-    else:
-        return 'Failed to fetch both activity and laps data', 400
