@@ -111,10 +111,7 @@ def load_to_bigquery(df: pd.DataFrame, table_id: str) -> None:
     print(f"Loaded {len(df)} rows into {table_id}")
 
 @flow
-def etl_flow(event: Dict[str, Any]):
-    athlete_id = event['athlete_id']
-    activity_id = event['activity_id']
-    
+def etl_flow(athlete_id: str, activity_id: str):
     # Extract
     data = extract_data(athlete_id, activity_id)
     
@@ -125,22 +122,3 @@ def etl_flow(event: Dict[str, Any]):
     # Load
     load_to_bigquery(transformed_activity, "strava-etl.strava_data.activities")
     load_to_bigquery(transformed_laps, "strava-etl.strava_data.laps")
-
-def callback(message: pubsub_v1.subscriber.message.Message) -> None:
-    print(f"Received message: {message}")
-    event = json.loads(message.data.decode("utf-8"))
-    etl_flow(event)
-    message.ack()
-
-if __name__ == "__main__":
-    subscriber = pubsub_v1.SubscriberClient()
-    subscription_path = subscriber.subscription_path("strava-etl", "etl-trigger-sub")
-    
-    streaming_pull_future = subscriber.subscribe(subscription_path, callback=callback)
-    print(f"Listening for messages on {subscription_path}")
-
-    try:
-        streaming_pull_future.result()
-    except Exception as e:
-        streaming_pull_future.cancel()
-        print(f"Listening for messages has stopped: {e}")
