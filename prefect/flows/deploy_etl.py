@@ -9,9 +9,9 @@ if __name__ == "__main__":
         work_pool_name="strava-etl-pool",
         job_variables={
             "env": {"PROJECT_ID": "strava-etl"},
-            "pip_packages": ["google-cloud-storage", "google-cloud-bigquery", "pandas"]
+            "pip_packages": ["google-cloud-storage", "google-cloud-bigquery", "google-cloud-pubsub", "pandas"]
         },
         tags=["prod"],
-        description="ETL flow for processing Strava activity data",
-        version="1.0.0",
+        description="Event-driven ETL flow for processing Strava activity data",
+        version="1.0.1",
     )
