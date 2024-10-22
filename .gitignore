@@ -6,6 +6,7 @@ __pycache__/
 # Virtual Environment
 venv/
 env/
+.venv/
 
 # Google Cloud
 *.json
