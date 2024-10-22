@@ -4,8 +4,6 @@ An event-driven ETL pipeline that processes Strava activities using Google Cloud
 
 ## System Architecture
 
-## System Architecture
-
 ```mermaid
 %%{init: {
   'theme': 'base',
