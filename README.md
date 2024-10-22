@@ -193,7 +193,7 @@ Common issues and solutions:
 
 ## License
 
-[Your License Type]
+MIT License
 
 ## Contact
 
