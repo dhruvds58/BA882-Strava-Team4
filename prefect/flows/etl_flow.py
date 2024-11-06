@@ -125,11 +125,30 @@ def load_to_bigquery(gcp_credentials: GcpCredentials, df: pd.DataFrame, table_id
     logger.info(f"Loading {len(df)} rows into BigQuery table {table_id}")
     client = bigquery.Client(credentials=gcp_credentials.get_credentials_from_service_account())
     
+    # Get the destination table schema
+    table = client.get_table(table_id)
+    schema_fields = {field.name: field.field_type for field in table.schema}
+    
+    # Add missing columns with appropriate null values based on data type
+    for field_name, field_type in schema_fields.items():
+        if field_name not in df.columns:
+            logger.info(f"Adding missing column {field_name} with NULL values")
+            if field_type == 'INTEGER':
+                df[field_name] = pd.NA
+            elif field_type == 'FLOAT':
+                df[field_name] = pd.NA
+            elif field_type == 'STRING':
+                df[field_name] = None
+            elif field_type == 'TIMESTAMP':
+                df[field_name] = pd.NaT
+            else:
+                df[field_name] = None
+    
     # Configure the load job to use a temporary table
     job_config = bigquery.LoadJobConfig(
         create_disposition=bigquery.CreateDisposition.CREATE_IF_NEEDED,
         write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
-        schema=client.get_table(table_id).schema
+        schema=table.schema
     )
     
     # Create a temporary table name
@@ -139,19 +158,16 @@ def load_to_bigquery(gcp_credentials: GcpCredentials, df: pd.DataFrame, table_id
     job = client.load_table_from_dataframe(df, temp_table_id, job_config=job_config)
     job.result()
     
-    # Determine the unique key based on the table
-    unique_key = "id"  # This is the unique key for both activities and laps
-    
     # Perform MERGE operation
     merge_query = f"""
     MERGE `{table_id}` T
     USING `{temp_table_id}` S
-    ON T.{unique_key} = S.{unique_key}
+    ON T.id = S.id
     WHEN MATCHED THEN
-        UPDATE SET {', '.join([f'T.{col.name} = S.{col.name}' for col in client.get_table(table_id).schema if col.name != unique_key])}
+        UPDATE SET {', '.join([f'T.{col.name} = S.{col.name}' for col in table.schema if col.name != 'id'])}
     WHEN NOT MATCHED THEN
-        INSERT ({', '.join([col.name for col in client.get_table(table_id).schema])})
-        VALUES ({', '.join([f'S.{col.name}' for col in client.get_table(table_id).schema])})
+        INSERT ({', '.join([col.name for col in table.schema])})
+        VALUES ({', '.join([f'S.{col.name}' for col in table.schema])})
     """
     
     # Execute merge query
