@@ -109,16 +109,59 @@ def transform_laps_data(laps_data: List[Dict[str, Any]]) -> pd.DataFrame:
     logger.info(f"Transformed laps data into DataFrame with shape {df.shape}")
     return df
 
+# @task
+# def load_to_bigquery(gcp_credentials: GcpCredentials, df: pd.DataFrame, table_id: str) -> None:
+#     logger.info(f"Loading {len(df)} rows into BigQuery table {table_id}")
+#     client = bigquery.Client(credentials=gcp_credentials.get_credentials_from_service_account())
+#     job_config = bigquery.LoadJobConfig(autodetect=True)
+    
+#     job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
+#     job.result()
+
+#     logger.info(f"Successfully loaded {len(df)} rows into {table_id}")
+
 @task
 def load_to_bigquery(gcp_credentials: GcpCredentials, df: pd.DataFrame, table_id: str) -> None:
     logger.info(f"Loading {len(df)} rows into BigQuery table {table_id}")
     client = bigquery.Client(credentials=gcp_credentials.get_credentials_from_service_account())
-    job_config = bigquery.LoadJobConfig(autodetect=True)
     
-    job = client.load_table_from_dataframe(df, table_id, job_config=job_config)
+    # Configure the load job to use a temporary table
+    job_config = bigquery.LoadJobConfig(
+        create_disposition=bigquery.CreateDisposition.CREATE_IF_NEEDED,
+        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+        schema=client.get_table(table_id).schema
+    )
+    
+    # Create a temporary table name
+    temp_table_id = f"{table_id}_temp_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    # Load data into temporary table
+    job = client.load_table_from_dataframe(df, temp_table_id, job_config=job_config)
     job.result()
-
-    logger.info(f"Successfully loaded {len(df)} rows into {table_id}")
+    
+    # Determine the unique key based on the table
+    unique_key = "id"  # This is the unique key for both activities and laps
+    
+    # Perform MERGE operation
+    merge_query = f"""
+    MERGE `{table_id}` T
+    USING `{temp_table_id}` S
+    ON T.{unique_key} = S.{unique_key}
+    WHEN MATCHED THEN
+        UPDATE SET {', '.join([f'T.{col.name} = S.{col.name}' for col in client.get_table(table_id).schema if col.name != unique_key])}
+    WHEN NOT MATCHED THEN
+        INSERT ({', '.join([col.name for col in client.get_table(table_id).schema])})
+        VALUES ({', '.join([f'S.{col.name}' for col in client.get_table(table_id).schema])})
+    """
+    
+    # Execute merge query
+    merge_job = client.query(merge_query)
+    merge_job.result()
+    
+    # Clean up temporary table
+    client.delete_table(temp_table_id)
+    
+    logger.info(f"Successfully loaded/updated data in {table_id}")
 
 @flow
 def etl_flow(athlete_id: str, activity_id: str):
