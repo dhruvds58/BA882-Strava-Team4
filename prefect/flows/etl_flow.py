@@ -89,23 +89,73 @@ def transform_activity_data(activity_data: Dict[str, Any]) -> pd.DataFrame:
     return df
 
 @task
-def transform_laps_data(laps_data: List[Dict[str, Any]], activity_id: str, athlete_id: str) -> pd.DataFrame:
+def transform_laps_data(laps_data: List[Dict[str, Any]]) -> pd.DataFrame:
     logger.info("Transforming laps data")
-    
-    # Define the columns we want to keep based on schema
-    columns_to_keep = [
-        'id', 'resource_state', 'name', 'elapsed_time', 'moving_time',
-        'start_date', 'start_date_local', 'distance', 'average_speed',
-        'max_speed', 'lap_index', 'total_elevation_gain', 'average_cadence',
-        'device_watts', 'average_watts', 'average_heartrate', 'max_heartrate',
-        'pace_zone', 'split', 'start_index', 'end_index'
-    ]
     
     df = pd.json_normalize(laps_data, sep='_')
     
-    # Add IDs
-    df['activity_id'] = activity_id
-    df['athlete_id'] = athlete_id
+    # Extract IDs and metadata from the nested data
+    df['activity_id'] = df['activity.id']
+    df['athlete_id'] = df['athlete.id']
+    
+    # Group columns logically
+    identifier_columns = [
+        'id',                    # Lap ID
+        'activity_id',          # Reference to parent activity
+        'athlete_id',           # Reference to athlete
+        'lap_index',            # Order of the lap
+        'split',                # Split number
+        'resource_state'        # API resource state
+    ]
+    
+    name_columns = [
+        'name'                  # Lap name
+    ]
+    
+    timing_columns = [
+        'elapsed_time',         # Total time including stops
+        'moving_time',          # Active time
+        'start_date',          # UTC timestamp
+        'start_date_local',    # Local timestamp
+        'start_index',         # Starting point in activity stream
+        'end_index'            # Ending point in activity stream
+    ]
+    
+    distance_speed_columns = [
+        'distance',            # Distance in meters
+        'average_speed',       # Average speed
+        'max_speed',          # Maximum speed
+        'pace_zone'           # Pace zone classification
+    ]
+    
+    power_columns = [
+        'device_watts',        # Whether power meter was used
+        'average_watts',       # Average power output
+    ]
+    
+    biometric_columns = [
+        'average_cadence',     # Average cadence
+        'average_heartrate',   # Average heart rate
+        'max_heartrate'        # Maximum heart rate
+    ]
+    
+    elevation_columns = [
+        'total_elevation_gain' # Total climbing in meters
+    ]
+    
+    # Combine all columns
+    columns_to_keep = (
+        identifier_columns +
+        name_columns +
+        timing_columns +
+        distance_speed_columns +
+        power_columns +
+        biometric_columns +
+        elevation_columns
+    )
+    
+    # Keep only the columns we want
+    df = df[columns_to_keep]
     
     # Handle dates
     date_columns = ['start_date', 'start_date_local']
@@ -114,16 +164,13 @@ def transform_laps_data(laps_data: List[Dict[str, Any]], activity_id: str, athle
             df[col] = pd.to_datetime(df[col])
     
     # Convert numeric columns to appropriate types
-    int_columns = [
-        'id', 'resource_state', 'elapsed_time', 'moving_time',
-        'lap_index', 'device_watts', 'pace_zone', 'split',
-        'start_index', 'end_index', 'activity_id', 'athlete_id'
-    ]
+    int_columns = identifier_columns + ['elapsed_time', 'moving_time', 
+                                      'device_watts', 'pace_zone', 'split',
+                                      'start_index', 'end_index']
     
-    float_columns = [
-        'distance', 'average_speed', 'max_speed', 'total_elevation_gain',
-        'average_cadence', 'average_watts', 'average_heartrate', 'max_heartrate'
-    ]
+    float_columns = ['distance', 'average_speed', 'max_speed', 
+                    'total_elevation_gain', 'average_cadence', 
+                    'average_watts', 'average_heartrate', 'max_heartrate']
     
     for col in int_columns:
         if col in df.columns:
