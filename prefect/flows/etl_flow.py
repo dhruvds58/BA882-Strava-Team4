@@ -89,24 +89,59 @@ def transform_activity_data(activity_data: Dict[str, Any]) -> pd.DataFrame:
     return df
 
 @task
-def transform_laps_data(laps_data: List[Dict[str, Any]]) -> pd.DataFrame:
+def transform_laps_data(laps_data: List[Dict[str, Any]], activity_id: str, athlete_id: str) -> pd.DataFrame:
     logger.info("Transforming laps data")
     
+    # Define the columns we want to keep based on schema
     columns_to_keep = [
         'id', 'resource_state', 'name', 'elapsed_time', 'moving_time',
         'start_date', 'start_date_local', 'distance', 'average_speed',
         'max_speed', 'lap_index', 'total_elevation_gain', 'average_cadence',
         'device_watts', 'average_watts', 'average_heartrate', 'max_heartrate',
-        'pace_zone'
+        'pace_zone', 'split', 'start_index', 'end_index'
     ]
     
-    df = pd.json_normalize(laps_data, sep='_')[columns_to_keep]
+    df = pd.json_normalize(laps_data, sep='_')
     
+    # Add IDs
+    df['activity_id'] = activity_id
+    df['athlete_id'] = athlete_id
+    
+    # Handle dates
     date_columns = ['start_date', 'start_date_local']
     for col in date_columns:
-        df[col] = pd.to_datetime(df[col])
-
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col])
+    
+    # Convert numeric columns to appropriate types
+    int_columns = [
+        'id', 'resource_state', 'elapsed_time', 'moving_time',
+        'lap_index', 'device_watts', 'pace_zone', 'split',
+        'start_index', 'end_index', 'activity_id', 'athlete_id'
+    ]
+    
+    float_columns = [
+        'distance', 'average_speed', 'max_speed', 'total_elevation_gain',
+        'average_cadence', 'average_watts', 'average_heartrate', 'max_heartrate'
+    ]
+    
+    for col in int_columns:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce', downcast='integer')
+    
+    for col in float_columns:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+    
+    # Add time-based columns for analysis
+    if 'start_date_local' in df.columns:
+        df['start_day'] = df['start_date_local'].dt.day
+        df['start_hour'] = df['start_date_local'].dt.hour
+        df['start_weekday'] = df['start_date_local'].dt.weekday
+    
     logger.info(f"Transformed laps data into DataFrame with shape {df.shape}")
+    logger.info(f"Sample of IDs - activity_id: {df['activity_id'].iloc[0]}, athlete_id: {df['athlete_id'].iloc[0]} if len(df) > 0 else 'No laps data'")
+    
     return df
 
 # @task
