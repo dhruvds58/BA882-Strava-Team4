@@ -92,11 +92,15 @@ def transform_activity_data(activity_data: Dict[str, Any]) -> pd.DataFrame:
 def transform_laps_data(laps_data: List[Dict[str, Any]]) -> pd.DataFrame:
     logger.info("Transforming laps data")
     
+    # Extract activity_id and athlete_id before normalizing
+    activity_id = laps_data[0]['activity']['id']
+    athlete_id = laps_data[0]['athlete']['id']
+    
     df = pd.json_normalize(laps_data, sep='_')
     
-    # Extract IDs and metadata from the nested data
-    df['activity_id'] = df['activity.id']
-    df['athlete_id'] = df['athlete.id']
+    # Add IDs as new columns
+    df['activity_id'] = activity_id
+    df['athlete_id'] = athlete_id
     
     # Group columns logically
     identifier_columns = [
@@ -187,7 +191,7 @@ def transform_laps_data(laps_data: List[Dict[str, Any]]) -> pd.DataFrame:
         df['start_weekday'] = df['start_date_local'].dt.weekday
     
     logger.info(f"Transformed laps data into DataFrame with shape {df.shape}")
-    logger.info(f"Sample of IDs - activity_id: {df['activity_id'].iloc[0]}, athlete_id: {df['athlete_id'].iloc[0]} if len(df) > 0 else 'No laps data'")
+    logger.info(f"Sample of IDs - activity_id: {activity_id}, athlete_id: {athlete_id}")
     
     return df
 
