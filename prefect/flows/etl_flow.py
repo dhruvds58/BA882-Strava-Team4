@@ -125,11 +125,50 @@ def load_to_bigquery(gcp_credentials: GcpCredentials, df: pd.DataFrame, table_id
     logger.info(f"Loading {len(df)} rows into BigQuery table {table_id}")
     client = bigquery.Client(credentials=gcp_credentials.get_credentials_from_service_account())
     
+    # Define unique key combinations based on table
+    if table_id.endswith('activities'):
+        unique_keys = ['athlete_id', 'id']  # id here is activity_id
+    elif table_id.endswith('laps'):
+        unique_keys = ['athlete_id', 'activity_id', 'id']
+    else:
+        raise ValueError(f"Unknown table type: {table_id}")
+        
+    logger.info(f"Using composite key: {unique_keys}")
+    
     # Get the destination table schema
     table = client.get_table(table_id)
     schema_fields = {field.name: field.field_type for field in table.schema}
     
-    # Add missing columns with appropriate null values based on data type
+    # Check for new columns in the data that aren't in BigQuery
+    new_columns = set(df.columns) - set(schema_fields.keys())
+    if new_columns:
+        logger.info(f"Found new columns in data: {new_columns}")
+        
+        # Infer schema for new columns
+        new_schema_fields = []
+        for col in new_columns:
+            if pd.api.types.is_integer_dtype(df[col]):
+                field_type = 'INTEGER'
+            elif pd.api.types.is_float_dtype(df[col]):
+                field_type = 'FLOAT'
+            elif pd.api.types.is_datetime64_any_dtype(df[col]):
+                field_type = 'TIMESTAMP'
+            else:
+                field_type = 'STRING'
+            
+            new_schema_fields.append(
+                bigquery.SchemaField(col, field_type, mode='NULLABLE')
+            )
+            schema_fields[col] = field_type
+            
+        # Update table schema
+        if new_schema_fields:
+            new_schema = table.schema + new_schema_fields
+            table.schema = new_schema
+            table = client.update_table(table, ['schema'])
+            logger.info(f"Updated BigQuery schema with new columns: {new_columns}")
+    
+    # Add missing columns from BigQuery schema to DataFrame
     for field_name, field_type in schema_fields.items():
         if field_name not in df.columns:
             logger.info(f"Adding missing column {field_name} with NULL values")
@@ -158,13 +197,16 @@ def load_to_bigquery(gcp_credentials: GcpCredentials, df: pd.DataFrame, table_id
     job = client.load_table_from_dataframe(df, temp_table_id, job_config=job_config)
     job.result()
     
-    # Perform MERGE operation
+    # Build the composite key matching condition
+    match_condition = ' AND '.join([f'T.{key} = S.{key}' for key in unique_keys])
+    
+    # Perform MERGE operation with composite key
     merge_query = f"""
     MERGE `{table_id}` T
     USING `{temp_table_id}` S
-    ON T.id = S.id
+    ON {match_condition}
     WHEN MATCHED THEN
-        UPDATE SET {', '.join([f'T.{col.name} = S.{col.name}' for col in table.schema if col.name != 'id'])}
+        UPDATE SET {', '.join([f'T.{col.name} = S.{col.name}' for col in table.schema if col.name not in unique_keys])}
     WHEN NOT MATCHED THEN
         INSERT ({', '.join([col.name for col in table.schema])})
         VALUES ({', '.join([f'S.{col.name}' for col in table.schema])})
