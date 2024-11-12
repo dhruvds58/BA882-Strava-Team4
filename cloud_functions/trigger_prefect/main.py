@@ -5,7 +5,7 @@ import base64
 import os
 import sys
 
-PREFECT_API_URL = os.environ.get('PREFECT_API_URL', 'https://api.prefect.cloud/api/accounts/496b41f9-ec7b-45a5-bbce-de4cb052becd/workspaces/d07f4058-3aa0-4b93-85cc-3a327b558db4')
+PREFECT_API_URL = os.environ.get('PREFECT_API_URL')
 PREFECT_API_KEY = os.environ.get('PREFECT_API_KEY')
 PREFECT_DEPLOYMENT_ID = os.environ.get('PREFECT_DEPLOYMENT_ID')
 
