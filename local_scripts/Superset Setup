@@ -1,0 +1,63 @@
+# # Apache Superset Setup on Google Compute Engine with BigQuery
+
+# This notebook details the setup of Apache Superset on Google Compute Engine (GCE)
+# and connecting it to BigQuery for building dashboards.
+
+# ### Step 1: Set Up the Google Compute Engine (GCE) Instance
+
+# Import necessary libraries for interacting with GCE if running commands programmatically
+# Here we are focusing on shell commands for setting up a virtual machine manually through the console.
+
+# Set up VM instance on GCE through Google Cloud Console.
+# - Go to "Compute Engine" > "VM Instances" and create a new instance.
+# - Choose a machine type with sufficient memory and CPU, e.g., `e2-standard-2`.
+# - Under "Networking", ensure you allow HTTP/S traffic to allow access to Superset.
+
+# ### Step 2: Connect to the VM Instance via SSH
+
+# Once the VM is up and running, SSH into the instance:
+# ```bash
+# gcloud compute ssh <INSTANCE_NAME> --zone=<ZONE>
+# ```
+
+# ### Step 3: Update and Install Docker and Docker-Compose on the VM
+
+# Update the package list and install Docker
+!sudo apt update
+!sudo apt install -y docker.io docker-compose
+
+# Verify Docker installation
+!docker --version
+!docker-compose --version
+
+# ### Step 4: Clone Apache Superset Repository and Start Superset
+
+# Clone the Superset repository from GitHub
+!git clone --depth=1 https://github.com/apache/superset.git
+%cd superset
+
+# Set up a requirements file for BigQuery if additional packages are needed
+# ```bash
+# echo "google-cloud-bigquery" >> ./docker/requirements-local.txt
+# ```
+
+# Export the Superset Docker image tag version
+!export TAG=3.1.1  # Replace with the latest stable version if different
+
+# Start Superset with Docker Compose, specifying the image tag version
+!sudo docker compose -f docker-compose-non-dev.yml up -d
+
+# ### Step 5: Set Up BigQuery as a Data Source in Superset
+
+# Once Superset is up, access the Superset web UI
+# - Go to http://<EXTERNAL_IP>:8088 (replace <EXTERNAL_IP> with your GCE instance's external IP)
+# - Log in with the default credentials: `admin` / `admin`
+
+
+# ### Step 6: Configure Firewall Rules for Access and Minimize Costs
+
+# Set up a firewall rule in Google Cloud Console to allow access on port 8088.
+# Go to "VPC network" > "Firewall", create a rule for port 8088, and apply it to the VM instance.
+
+# Remember to stop the VM when it's not in use to avoid incurring unnecessary costs.
+
