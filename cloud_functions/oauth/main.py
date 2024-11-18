@@ -41,5 +41,6 @@ def oauth_flow(request):
             return f'Error: {response.status_code}, {response.text}', 400
     else:
         # Initiate the OAuth flow
-        auth_url = f"https://www.strava.com/oauth/authorize?client_id={CLIENT_ID}&response_type=code&redirect_uri={REDIRECT_URI}&scope=activity:read_all"
+        # auth_url = f"https://www.strava.com/oauth/authorize?client_id={CLIENT_ID}&response_type=code&redirect_uri={REDIRECT_URI}&scope=activity:read_all"
+        auth_url = f"https://www.strava.com/oauth/authorize?client_id={CLIENT_ID}&response_type=code&redirect_uri={REDIRECT_URI}&scope=activity:read_all,activity:write"
         return f'<a href="{auth_url}">Authorize with Strava</a>'

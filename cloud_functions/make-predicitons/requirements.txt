@@ -1,0 +1,6 @@
+functions-framework==3.*
+google-cloud-storage==2.*
+pandas==2.*
+scikit-learn==1.*
+joblib==1.*
+requests==2.*
