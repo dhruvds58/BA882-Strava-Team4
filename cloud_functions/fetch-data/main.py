@@ -26,7 +26,7 @@ ETL_TOPIC = 'projects/strava-etl/topics/etl-trigger'
 PREDICT_TOPIC = 'projects/strava-etl/topics/make-prediction'
 
 # Define columns needed for prediction
-PREDICTION_COLUMNS = ['distance', 'moving_time', 'suffer_score']
+PREDICTION_COLUMNS = ['distance', 'moving_time', 'average_heartrate']
 
 def refresh_access_token(athlete_id, refresh_token):
     """Refresh the access token using the provided refresh token."""
