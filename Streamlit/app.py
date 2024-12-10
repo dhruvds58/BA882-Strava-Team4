@@ -14,39 +14,119 @@ from google.cloud import bigquery
 import vertexai
 from vertexai.generative_models import GenerativeModel, ChatSession
 
-# Page configuration with a runner emoji and Strava's color
+# Page configuration
 st.set_page_config(
     page_title="Strava Dashboard",
-    page_icon=":runner:",  # Runner emoji
+    page_icon=":runner:",
     layout="wide",
 )
 
-# Custom CSS to change the background to Strava orange
+# Custom CSS for black background, modern navigation, and KPI styling
 st.markdown("""
     <style>
         body {
-            background-color: #fc4c02;  /* Strava orange */
-            color: white;  /* Text color to make it readable on orange background */
+            background-color: #000000;
+            color: white;
+            font-family: 'Arial', sans-serif;
         }
         .block-container {
-            background-color: transparent;
+            padding: 1.5rem;
+            background-color: rgba(0, 0, 0, 0);
         }
-        h1, h2, h3, h4, h5, h6 {
+        .logo-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .logo-container img {
+            width: 100%;
+            max-width: 200px;
+        }
+        .tab-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab-button {
+            width: 100%;
+            max-width: 250px;
+            padding: 10px 15px;
+            text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            background-color: #111111;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .tab-button.active {
+            background-color: #fc4c02;
+        }
+        .tab-button:hover {
+            background-color: #ff5733;
+        }
+        .kpi-card {
+            background-color: #111111;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 10px;
+            text-align: center;
+            width: 200px;
+            box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .kpi-card:hover {
+            transform: translateY(-5px); /* Lift the card */
+            box-shadow: 0px 8px 30px rgba(0, 0, 0, 0.3); /* Enhance shadow on hover */
+        }
+        .kpi-card h3 {
+            font-size: 20px;
+            margin: 0;
+            color: #fc4c02;
+        }
+        .kpi-card p {
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        .kpi-card .value {
+            font-size: 30px;
             color: white;
         }
-        .css-1v3fvcr {
-            background-color: #fc4c02 !important;
+        .stDataFrame {
+            background-color: #111111;
+        }
+        .stDataFrame tbody tr:hover {
+            background-color: #fc4c02;
         }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-# Display the image from GCS
-st.image(
-    "https://storage.googleapis.com/strava-logo/stravalogo.png",  # Image URL from GCS
-    caption="Strava Dashboard",
-    use_container_width=False,
-    width=400,  # Adjust image size as needed
-)
+# Initialize session state for tab tracking
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = "Data Overview"
+
+# Sidebar with logo and custom tabs
+st.sidebar.markdown("""
+    <div class="logo-container">
+        <img src="https://storage.googleapis.com/strava-logo/stravalogo.png" alt="Strava Logo">
+    </div>
+    <div class="tab-container">
+""", unsafe_allow_html=True)
+
+if st.sidebar.button("📊 Data Overview", key="data_overview_button"):
+    st.session_state.active_tab = "Data Overview"
+
+if st.sidebar.button("🤖 Chatbot", key="chatbot_button"):
+    st.session_state.active_tab = "Chatbot"
+
+if st.sidebar.button("🔮 ML Predictions", key="ml_predictions_button"):
+    st.session_state.active_tab = "ML Predictions"
+
+st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
 # Initialize Vertex AI
 GCP_PROJECT = 'strava-etl'
@@ -67,13 +147,12 @@ def get_strava_data():
     """
     client = bigquery.Client(project=GCP_PROJECT, location="US")
     query_job = client.query(query)
-    result = query_job.result()  # Wait for the query to finish
+    result = query_job.result()
 
-    # Convert result to DataFrame
     data = pd.DataFrame([dict(row.items()) for row in result])
     return data
 
-# Function to fetch ML predictions (clustering_labels) from BigQuery
+# Function to fetch ML predictions from BigQuery
 def get_ml_predictions():
     query = """
     SELECT id, start_date, distance, moving_time, average_heartrate, run_type_str
@@ -83,28 +162,23 @@ def get_ml_predictions():
     """
     client = bigquery.Client(project=GCP_PROJECT, location="US")
     query_job = client.query(query)
-    result = query_job.result()  # Wait for the query to finish
+    result = query_job.result()
 
-    # Convert result to DataFrame
     predictions = pd.DataFrame([dict(row.items()) for row in result])
     return predictions
 
 # Function to get chat response from Vertex AI
 def get_chat_response(chat: ChatSession, prompt: str, dataset: pd.DataFrame) -> str:
-    # Convert the first 50 rows of the DataFrame to a JSON-like format (records)
-    dataset_sample = dataset.head(50).to_dict(orient='records')  # Get the first 50 rows
+    dataset_sample = dataset.head(50).to_dict(orient='records')
 
-    # Summarize the dataset context (optionally provide aggregation if necessary to reduce size)
     dataset_summary = f"""
     Here are the first 50 rows of your Strava data:
     {dataset_sample}
     You can ask me questions about trends, gear usage, total distance, or any specific activity.
     """
 
-    # Full prompt with the dataset sample
     full_prompt = f"{dataset_summary}\n\nQuestion: {prompt}"
 
-    # Get the chatbot's response
     text_response = []
     responses = chat.send_message(full_prompt, stream=True)
     for chunk in responses:
@@ -112,95 +186,165 @@ def get_chat_response(chat: ChatSession, prompt: str, dataset: pd.DataFrame) -> 
 
     return "".join(text_response)
 
-# App UI
-st.markdown("### Welcome to your Strava Data Dashboard!")
+# Main Navigation and Content Rendering
+if st.session_state.active_tab == "Data Overview":
+    st.title("📊 Data Overview")
+    try:
+        strava_data_df = get_strava_data()
 
-# Fetch and display Strava data
-try:
-    strava_data_df = get_strava_data()  # Fetch Strava data
-    ml_predictions_df = get_ml_predictions()  # Fetch ML predictions
+        # Create and display visual statistics (KPI-style)
+        st.subheader("Summary Statistics (KPIs)")
 
-    # Create tabs for Data Overview, Chatbot, and ML Predictions
-    tab1, tab2, tab3 = st.tabs(["📊 Data Overview", "🤖 Chatbot", "🔮 ML Predictions"])
-
-    # Tab 1: Data Overview
-    with tab1:
-        st.subheader("Recent Strava Activities")
-        st.dataframe(strava_data_df)  # Display Strava data in a table
-
-        # Summary Statistics
-        st.subheader("Summary Statistics")
+        # Prepare data for the KPIs
         stats = {
             "Total Activities": len(strava_data_df),
             "Total Distance (meters)": strava_data_df['distance'].sum(),
             "Average Distance (meters)": strava_data_df['distance'].mean(),
             "Total Calories Burned": strava_data_df['calories'].sum(),
             "Average Speed (m/s)": strava_data_df['average_speed'].mean(),
+            "Max Speed (m/s)": strava_data_df['average_speed'].max(),
+            "Max Calories Burned": strava_data_df['calories'].max(),
+            "Average Heart Rate (bpm)": strava_data_df['average_heartrate'].mean(),
+            "Total Moving Time (seconds)": strava_data_df['moving_time'].sum(),
         }
-        for key, value in stats.items():
-            st.write(f"- **{key}:** {value:.2f}")
 
-    # Tab 2: Chatbot
-    with tab2:
-        st.subheader("Ask the Chatbot")
-        prompt = st.text_input("Ask a question about your Strava data:")
+        # Display the KPIs in card format
+        col1, col2, col3, col4, col5 = st.columns(5)
+
+        with col1:
+            st.markdown(f"""
+                <div class="kpi-card">
+                    <h3>Total Activities</h3>
+                    <p class="value">{stats['Total Activities']:.2f}</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with col2:
+            st.markdown(f"""
+                <div class="kpi-card">
+                    <h3>Total Distance (meters)</h3>
+                    <p class="value">{stats['Total Distance (meters)']:.2f}</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with col3:
+            st.markdown(f"""
+                <div class="kpi-card">
+                    <h3>Average Distance (meters)</h3>
+                    <p class="value">{stats['Average Distance (meters)']:.2f}</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with col4:
+            st.markdown(f"""
+                <div class="kpi-card">
+                    <h3>Total Calories Burned</h3>
+                    <p class="value">{stats['Total Calories Burned']:.2f}</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with col5:
+            st.markdown(f"""
+                <div class="kpi-card">
+                    <h3>Average Speed (m/s)</h3>
+                    <p class="value">{stats['Average Speed (m/s)']:.2f}</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        # Additional KPIs below
+        col6, col7, col8, col9 = st.columns(4)
+
+        with col6:
+            st.markdown(f"""
+                <div class="kpi-card">
+                    <h3>Max Speed (m/s)</h3>
+                    <p class="value">{stats['Max Speed (m/s)']:.2f}</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with col7:
+            st.markdown(f"""
+                <div class="kpi-card">
+                    <h3>Max Calories Burned</h3>
+                    <p class="value">{stats['Max Calories Burned']:.2f}</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with col8:
+            st.markdown(f"""
+                <div class="kpi-card">
+                    <h3>Average Heart Rate (bpm)</h3>
+                    <p class="value">{stats['Average Heart Rate (bpm)']:.2f}</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with col9:
+            st.markdown(f"""
+                <div class="kpi-card">
+                    <h3>Total Moving Time (seconds)</h3>
+                    <p class="value">{stats['Total Moving Time (seconds)']:.2f}</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        # Display the dataframe
+        st.subheader("Recent Strava Activities")
+        st.dataframe(strava_data_df)
+
+    except Exception as e:
+        st.error(f"An error occurred: {e}")
+
+elif st.session_state.active_tab == "Chatbot":
+    st.title("🤖 Chatbot")
+    st.subheader("Ask the Chatbot")
+    prompt = st.text_input("Ask a question about your Strava data:")
+    try:
+        strava_data_df = get_strava_data()
         if prompt:
             response = get_chat_response(chat_session, prompt, strava_data_df)
             st.markdown(f"**Chatbot Response:** {response}")
-
-        # Add note below the chatbot informing users
         st.markdown("**Note**: The chatbot can only answer questions based on the last 50 runs.")
+    except Exception as e:
+        st.error(f"An error occurred: {e}")
 
-    # Tab 3: ML Predictions
-    with tab3:
-        st.subheader("ML Predictions - Clustering Labels")
-        st.dataframe(ml_predictions_df)  # Display ML predictions in a table
+elif st.session_state.active_tab == "ML Predictions":
+    st.title("🔮 ML Predictions")
+    
+    # Display 3D scatter plot before the data table
+    st.subheader("3D Scatter Plot: Distance vs Moving Time vs Average Heart Rate")
+    try:
+        ml_predictions_df = get_ml_predictions()
 
-        # 3D Scatter Plot: Plotting the distribution of distance, moving_time, and average_heartrate
-        st.subheader("3D Scatter Plot: Distance vs Moving Time vs Average Heart Rate")
-
-        # Highlight the latest run
-        latest_run = ml_predictions_df.iloc[0]  # Assuming the first row is the latest based on sorting by start_date
-
-        # Create a 3D scatter plot
+        # Create a 3D scatter plot with adjusted size
         fig = px.scatter_3d(
             ml_predictions_df,
             x='distance',
             y='moving_time',
             z='average_heartrate',
-            color='run_type_str',  # Color points by run_type_str
+            color='run_type_str',
             title='3D Scatter Plot of Runs',
             labels={
                 'distance': 'Distance (m)',
                 'moving_time': 'Moving Time (s)',
                 'average_heartrate': 'Average Heart Rate (bpm)'
-            },
-            category_orders={"run_type_str": ml_predictions_df['run_type_str'].unique()}  # Ensure consistent color mapping
+            }
+        )
+        
+        # Update layout with larger dimensions
+        fig.update_layout(
+            height=600,
+            width=1200,
+            margin=dict(l=50, r=50, b=50, t=50)
         )
 
-        # Add the latest run as a distinct marker
-        fig.add_scatter3d(
-            x=[latest_run['distance']],
-            y=[latest_run['moving_time']],
-            z=[latest_run['average_heartrate']],
-            mode='markers+text',
-            marker=dict(
-                size=12,  # Larger size for the latest run
-                symbol='diamond',  # Unique marker symbol
-                color=fig.data[[trace.name for trace in fig.data].index(latest_run['run_type_str'])].marker.color,  # Match cluster color
-            ),
-            name="Latest Run",  # Add a custom legend entry
-            text=["Latest Run"],  # Label for the latest run
-            textposition="top center",
-            showlegend=True  # Ensure it shows in the legend
-        )
-
-        # Display the plot in Streamlit
         st.plotly_chart(fig)
 
-except Exception as e:
-    st.error(f"An error occurred: {e}")
+        # Display the dataframe below the chart
+        st.subheader("Clustering Labels and Analysis")
+        st.dataframe(ml_predictions_df)
+
+    except Exception as e:
+        st.error(f"An error occurred: {e}")
 
 # Footer
-st.markdown("---")
-st.markdown("Your Strava Journey, Visualized | Powered by Streamlit and Strava Data | Team 4: Bennett Blanco | Yu-Chin (Alyssa) Chen | Dhruv Shah | Ahmed Farid Khan")
+st.sidebar.markdown("---")
+st.sidebar.markdown("Your Strava Journey, Visualized | Powered by Streamlit and Strava Data | Team 4: Bennett Blanco | Yu-Chin (Alyssa) Chen | Dhruv Shah | Ahmed Farid Khan")
