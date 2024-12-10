@@ -26,12 +26,17 @@ graph TD
     L -->|Provide Token| C
     C -->|Store Raw Data| D[(Raw Data Storage)]
     C -->|Publish Message| E{ETL Trigger}
+    C -->|Share Data| X(Make Predictions Function)
     E -->|Trigger| F[Prefect Orchestrator]
     F -->|Execute| G(ETL Flow)
     G -->|Read Raw Data| D
     G -->|Transform| H[Transform Data]
     H -->|Load| I[(BigQuery Tables)]
+    I -->|VM| M[Superset]
+    I -->|Container| S[Streamlit App]
     J[GCP Credentials] -.->|Provide Credentials| G
+    X -->|API Call| A
+    N[(Model Storage)] -->|Load Models| X
 
     subgraph "Google Cloud Platform"
         B
@@ -41,9 +46,15 @@ graph TD
         I
         K
         L
+        X
+        M
+        N
+        S
         style D fill:#FFE5D9,stroke:#FC4C02
         style I fill:#FFE5D9,stroke:#FC4C02
         style L fill:#FFE5D9,stroke:#FC4C02
+        style N fill:#FFE5D9,stroke:#FC4C02
+        style S fill:#FC4C02,stroke:#2D2D2D,color:#FFF
     end
 
     subgraph "Prefect Cloud"
@@ -56,17 +67,16 @@ graph TD
         style H fill:#FC4C02,stroke:#2D2D2D,color:#FFF
     end
 
-    classDef apiNode fill:#2D2D2D,stroke:#FC4C02,color:#FFF
+    classDef apiNode fill:#FC4C02,stroke:#FC4C02,color:#FFF
     classDef functionNode fill:#FC4C02,stroke:#2D2D2D,color:#FFF
     classDef storageNode fill:#FFE5D9,stroke:#FC4C02,color:#2D2D2D
     classDef triggerNode fill:#FFF,stroke:#FC4C02,color:#2D2D2D
 
     class A apiNode
-    class B,C,K functionNode
-    class D,I,L storageNode
+    class B,C,K,X functionNode
+    class D,I,L,N storageNode
     class E,J triggerNode
 
-    %% Add labels for clarity
     linkStyle default stroke:#FC4C02,stroke-width:2px
 ```
 
