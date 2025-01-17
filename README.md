@@ -204,7 +204,3 @@ Common issues and solutions:
 ## License
 
 MIT License
-
-## Contact
-
-[Your Contact Information]
